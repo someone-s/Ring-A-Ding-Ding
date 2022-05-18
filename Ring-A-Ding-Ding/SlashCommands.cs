@@ -24,14 +24,7 @@ namespace RingADingDing
                 RedirectStandardOutput = true,
                 UseShellExecute = false
             });
-            Process? ffprobe = Process.Start(new ProcessStartInfo
-            {
-                FileName = "ffprobe",
-                Arguments = $@"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ""{filePath}""",
-                RedirectStandardOutput = true,
-                UseShellExecute = false
-            });
-            if (ffmpeg is null || ffprobe is null)
+            if (ffmpeg is null)
             {
                 await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Error"));
                 return;
@@ -39,9 +32,8 @@ namespace RingADingDing
 
             DiscordChannel[] voiceChannels = ctx.Guild.Channels.Where(c => c.Value.Type == ChannelType.Voice).Select(c => c.Value).ToArray();
 
-            Stream pcm = ffmpeg.StandardOutput.BaseStream;
-            float durationS = float.Parse(ffprobe.StandardOutput.ReadToEnd());
-
+            Stream pcm = new MemoryStream();
+            await ffmpeg.StandardOutput.BaseStream.CopyToAsync(pcm);
 
             for (int i = 0; i < voiceChannels.Length; i++)
             {
@@ -50,14 +42,18 @@ namespace RingADingDing
                 if (connection == null) continue;
 
                 VoiceTransmitSink transmit = connection.GetTransmitSink();
+                pcm.Position = 0;
                 await pcm.CopyToAsync(transmit);
-                await Task.Delay((int)(durationS * 1000f));
                 connection.Disconnect();
             }
 
             await pcm.DisposeAsync();
 
             await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Ringed"));
+
+            await Task.Delay(1000);
+
+            await ctx.DeleteResponseAsync();
         }
     }
 }
