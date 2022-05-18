@@ -55,16 +55,23 @@ namespace RingADingDing
 
                 for (int i = 0; i < voiceChannels.Length; i++)
                 {
-                    DiscordChannel voiceChannel = voiceChannels[i];
+                    try
+                    {
+                        DiscordChannel voiceChannel = voiceChannels[i];
 
-                    if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
-                    VoiceNextConnection connection = await voiceChannel.ConnectAsync();
+                        if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
+                        VoiceNextConnection connection = await voiceChannel.ConnectAsync();
 
-                    if (connection == null) continue;
-                    VoiceTransmitSink transmit = connection.GetTransmitSink();
-                    pcm.Position = 0;
-                    await pcm.CopyToAsync(transmit);
-                    connection.Disconnect();
+                        if (connection == null) continue;
+                        VoiceTransmitSink transmit = connection.GetTransmitSink();
+                        pcm.Position = 0;
+                        await pcm.CopyToAsync(transmit);
+                        connection.Disconnect();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.ToString());
+                    }
                 }
 
                 await pcm.DisposeAsync();
