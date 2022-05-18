@@ -7,12 +7,58 @@ using DSharpPlus.SlashCommands;
 
 namespace RingADingDing
 {
-    [SlashCommandGroup("General", "Typical commands")]
+    public class TimedStorage<T> : List<T>
+    {
+        private Dictionary<Wrapper, Task> timers = new Dictionary<Wrapper, Task>();
+
+        public new void Add(T item)
+        {
+            base.Add(item);
+
+            Wrapper key = new Wrapper { item = item };
+            if (timers.ContainsKey(key))
+                timers[key] = Timer(item);
+            else
+                timers.Add(key, Timer(item));
+        }
+
+        public new void Remove(T item)
+        {
+            if (Contains(item))
+                base.Remove(item);
+
+            Wrapper key = new Wrapper { item = item };
+            if (timers.ContainsKey(key))
+            {
+                timers[key].Dispose();
+                timers.Remove(key);
+            }
+        }
+
+        public async Task Timer(T item)
+        {
+            await Task.Delay(30000);
+
+            if (Contains(item))
+                base.Remove(item);
+
+            Wrapper key = new Wrapper { item = item };
+            if (timers.ContainsKey(key))
+                timers.Remove(key);
+        }
+
+        private struct Wrapper
+        {
+            public T item;
+        }
+    }
+
     public class SlashCommands : ApplicationCommandModule
     {
-        private static List<DiscordGuild> activeGuilds = new List<DiscordGuild>();
+        private static TimedStorage<DiscordGuild> activeGuilds = new TimedStorage<DiscordGuild>();
+        
 
-        [SlashCommand("Ring", "Ring the bong")]
+        [SlashCommand("ring", "ring all channels")]
         public async Task Ring(InteractionContext ctx)
         {
             if (activeGuilds.Contains(ctx.Guild))
@@ -55,23 +101,17 @@ namespace RingADingDing
 
                 for (int i = 0; i < voiceChannels.Length; i++)
                 {
-                    try
-                    {
-                        DiscordChannel voiceChannel = voiceChannels[i];
+                    DiscordChannel voiceChannel = voiceChannels[i];
 
-                        if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
-                        VoiceNextConnection connection = await voiceChannel.ConnectAsync();
+                    if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.AccessChannels)) continue;
+                    if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
+                    VoiceNextConnection connection = await voiceChannel.ConnectAsync();
 
-                        if (connection == null) continue;
-                        VoiceTransmitSink transmit = connection.GetTransmitSink();
-                        pcm.Position = 0;
-                        await pcm.CopyToAsync(transmit);
-                        connection.Disconnect();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex.ToString());
-                    }
+                    if (connection == null) continue;
+                    VoiceTransmitSink transmit = connection.GetTransmitSink();
+                    pcm.Position = 0;
+                    await pcm.CopyToAsync(transmit);
+                    connection.Disconnect();
                 }
 
                 await pcm.DisposeAsync();
@@ -84,7 +124,6 @@ namespace RingADingDing
 
                 activeGuilds.Remove(ctx.Guild);
             }
-            
         }
     }
 }
