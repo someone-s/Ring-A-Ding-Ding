@@ -10,52 +10,74 @@ namespace RingADingDing
     [SlashCommandGroup("General", "Typical commands")]
     public class SlashCommands : ApplicationCommandModule
     {
+        private static List<DiscordGuild> activeGuilds = new List<DiscordGuild>();
+
         [SlashCommand("Ring", "Ring the bong")]
         public async Task Ring(InteractionContext ctx)
         {
-            await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource,
-                new DiscordInteractionResponseBuilder().WithContent("Ringing"));
+            if (activeGuilds.Contains(ctx.Guild))
+            {
+                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource,
+                   new DiscordInteractionResponseBuilder().WithContent("At Work"));
 
-            var filePath = PathHandle.GetAudioPath();
-            Process? ffmpeg = Process.Start(new ProcessStartInfo
-            {
-                FileName = "ffmpeg",
-                Arguments = $@"-i ""{filePath}"" -ac 2 -f s16le -ar 48000 pipe:1",
-                RedirectStandardOutput = true,
-                UseShellExecute = false
-            });
-            if (ffmpeg is null)
-            {
-                await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Error"));
-                return;
+                await Task.Delay(1000);
+
+                await ctx.DeleteResponseAsync();
             }
-
-            DiscordChannel[] voiceChannels = ctx.Guild.Channels.Where(c => c.Value.Type == ChannelType.Voice).Select(c => c.Value).ToArray();
-
-            Stream pcm = new MemoryStream();
-            await ffmpeg.StandardOutput.BaseStream.CopyToAsync(pcm);
-
-            for (int i = 0; i < voiceChannels.Length; i++)
+            else
             {
-                DiscordChannel voiceChannel = voiceChannels[i];
+                activeGuilds.Add(ctx.Guild);
 
-                if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
-                VoiceNextConnection connection = await voiceChannel.ConnectAsync();
+                await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource,
+                   new DiscordInteractionResponseBuilder().WithContent("Ringing"));
 
-                if (connection == null) continue;
-                VoiceTransmitSink transmit = connection.GetTransmitSink();
-                pcm.Position = 0;
-                await pcm.CopyToAsync(transmit);
-                connection.Disconnect();
+                var filePath = PathHandle.GetAudioPath();
+                Process? ffmpeg = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = $@"-i ""{filePath}"" -ac 2 -f s16le -ar 48000 pipe:1",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false
+                });
+                if (ffmpeg is null)
+                {
+                    await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Error"));
+
+                    activeGuilds.Remove(ctx.Guild);
+
+                    return;
+                }
+
+                DiscordChannel[] voiceChannels = ctx.Guild.Channels.Where(c => c.Value.Type == ChannelType.Voice).Select(c => c.Value).ToArray();
+
+                Stream pcm = new MemoryStream();
+                await ffmpeg.StandardOutput.BaseStream.CopyToAsync(pcm);
+
+                for (int i = 0; i < voiceChannels.Length; i++)
+                {
+                    DiscordChannel voiceChannel = voiceChannels[i];
+
+                    if (!ctx.Guild.CurrentMember.PermissionsIn(voiceChannel).HasPermission(Permissions.UseVoice)) continue;
+                    VoiceNextConnection connection = await voiceChannel.ConnectAsync();
+
+                    if (connection == null) continue;
+                    VoiceTransmitSink transmit = connection.GetTransmitSink();
+                    pcm.Position = 0;
+                    await pcm.CopyToAsync(transmit);
+                    connection.Disconnect();
+                }
+
+                await pcm.DisposeAsync();
+
+                await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Ringed"));
+
+                await Task.Delay(1000);
+
+                await ctx.DeleteResponseAsync();
+
+                activeGuilds.Remove(ctx.Guild);
             }
-
-            await pcm.DisposeAsync();
-
-            await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Ringed"));
-
-            await Task.Delay(1000);
-
-            await ctx.DeleteResponseAsync();
+            
         }
     }
 }
